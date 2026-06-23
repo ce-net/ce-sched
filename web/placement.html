@@ -1,0 +1,561 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>ce-sched · placement visualizer</title>
+<style>
+  :root {
+    --bg: #0e1116;
+    --panel: #161b22;
+    --panel-2: #1c2330;
+    --line: #2a313c;
+    --line-soft: #222831;
+    --fg: #d7dee8;
+    --fg-dim: #8b97a7;
+    --fg-faint: #5d6775;
+    --accent: #4da3ff;
+    --good: #3fb950;
+    --warn: #d29922;
+    --bad: #f0556a;
+    --chosen: #1f6feb;
+    --mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--fg); font-family: var(--sans); font-size: 14px; }
+  a { color: var(--accent); }
+  code, .mono { font-family: var(--mono); }
+
+  header {
+    border-bottom: 1px solid var(--line);
+    padding: 14px 20px;
+    display: flex; align-items: baseline; gap: 14px;
+    background: linear-gradient(180deg, #11161d, #0e1116);
+  }
+  header h1 { font-size: 15px; margin: 0; font-weight: 600; letter-spacing: .2px; }
+  header .sub { color: var(--fg-dim); font-size: 12px; }
+  header .spacer { flex: 1; }
+  header .mode-badge {
+    font-size: 11px; font-family: var(--mono); padding: 3px 8px; border-radius: 4px;
+    border: 1px solid var(--line); color: var(--fg-dim);
+  }
+  header .mode-badge.live { color: var(--good); border-color: #1d3a26; }
+  header .mode-badge.demo { color: var(--warn); border-color: #3a3220; }
+
+  main { display: grid; grid-template-columns: 320px 1fr; gap: 0; min-height: calc(100vh - 53px); }
+  .controls { border-right: 1px solid var(--line); padding: 18px 18px 40px; background: var(--panel); overflow-y: auto; }
+  .results { padding: 20px 24px 60px; overflow-y: auto; }
+
+  .group { margin-bottom: 20px; }
+  .group > .label { font-size: 11px; text-transform: uppercase; letter-spacing: .8px; color: var(--fg-faint); margin-bottom: 9px; font-weight: 600; }
+  .field { margin-bottom: 11px; }
+  .field label { display: block; font-size: 12px; color: var(--fg-dim); margin-bottom: 4px; }
+  .field input[type=text], .field input[type=number], .field select {
+    width: 100%; background: var(--bg); border: 1px solid var(--line); color: var(--fg);
+    border-radius: 5px; padding: 7px 9px; font-size: 13px; font-family: var(--mono);
+  }
+  .field input:focus, .field select:focus { outline: none; border-color: var(--accent); }
+  .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; }
+  .hint { font-size: 11px; color: var(--fg-faint); margin-top: 3px; line-height: 1.4; }
+  .checkrow { display: flex; align-items: center; gap: 7px; font-size: 12px; color: var(--fg-dim); margin-bottom: 7px; }
+  .checkrow input { accent-color: var(--accent); }
+
+  button {
+    font-family: var(--sans); font-size: 13px; font-weight: 600; cursor: pointer;
+    border-radius: 6px; border: 1px solid var(--line); background: var(--panel-2); color: var(--fg);
+    padding: 9px 12px;
+  }
+  button.primary { background: var(--chosen); border-color: var(--chosen); color: #fff; width: 100%; }
+  button.primary:hover { background: #2f7ef0; }
+  button.ghost { background: transparent; }
+  button:disabled { opacity: .5; cursor: default; }
+  .btnrow { display: flex; gap: 8px; margin-top: 6px; }
+
+  /* summary cards */
+  .summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(135px, 1fr)); gap: 12px; margin-bottom: 22px; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; }
+  .card .k { font-size: 11px; text-transform: uppercase; letter-spacing: .6px; color: var(--fg-faint); }
+  .card .v { font-size: 22px; font-weight: 650; margin-top: 4px; font-family: var(--mono); }
+  .card .v.small { font-size: 15px; }
+  .card .note { font-size: 11px; color: var(--fg-dim); margin-top: 3px; }
+  .v.ok { color: var(--good); } .v.warn { color: var(--warn); } .v.bad { color: var(--bad); }
+
+  h2.section { font-size: 13px; text-transform: uppercase; letter-spacing: .7px; color: var(--fg-dim); margin: 26px 0 12px; font-weight: 600; border-bottom: 1px solid var(--line-soft); padding-bottom: 7px; }
+
+  /* chosen spread */
+  .spread { display: flex; flex-direction: column; gap: 9px; }
+  .replica {
+    background: var(--panel); border: 1px solid var(--line); border-left: 3px solid var(--chosen);
+    border-radius: 8px; padding: 11px 13px; display: grid;
+    grid-template-columns: 30px 1fr auto; gap: 13px; align-items: center;
+  }
+  .replica .rank { font-family: var(--mono); font-size: 18px; font-weight: 700; color: var(--accent); text-align: center; }
+  .replica .id { font-family: var(--mono); font-size: 13px; color: var(--fg); word-break: break-all; }
+  .replica .meta { font-size: 11px; color: var(--fg-dim); margin-top: 3px; display: flex; flex-wrap: wrap; gap: 5px 12px; }
+  .replica .meta b { color: var(--fg); font-weight: 600; }
+  .replica .score { font-family: var(--mono); font-size: 18px; font-weight: 700; text-align: right; }
+  .replica .score .lbl { display: block; font-size: 10px; font-weight: 400; color: var(--fg-faint); letter-spacing: .5px; }
+
+  .pill { font-family: var(--mono); font-size: 10px; padding: 1px 6px; border-radius: 4px; border: 1px solid var(--line); color: var(--fg-dim); white-space: nowrap; }
+  .pill.op { border-color: #2c3a52; color: #8fb6f0; }
+  .pill.region { border-color: #2c4a3a; color: #79c79a; }
+  .pill.asn { border-color: #4a3a2c; color: #d0a565; }
+  .pill.suspect { border-color: #5a2a30; color: var(--bad); }
+  .pill.fallback { border-color: #4a4030; color: var(--warn); }
+  .pill.measured { border-color: #2c4a3a; color: #79c79a; }
+  .pill.predicted { border-color: #3a3a4a; color: #9a9ad0; }
+
+  /* diversity bar */
+  .diversity { margin: 6px 0 4px; }
+  .divbar { display: flex; height: 22px; border-radius: 5px; overflow: hidden; border: 1px solid var(--line); }
+  .divseg { display: flex; align-items: center; justify-content: center; font-size: 10px; font-family: var(--mono); color: #0e1116; font-weight: 700; min-width: 0; overflow: hidden; white-space: nowrap; }
+  .divlegend { font-size: 11px; color: var(--fg-dim); margin-top: 6px; display: flex; flex-wrap: wrap; gap: 4px 14px; }
+  .divlegend span b { color: var(--fg); }
+
+  /* candidate table */
+  table.cands { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  table.cands th { text-align: left; color: var(--fg-faint); font-size: 11px; text-transform: uppercase; letter-spacing: .5px; font-weight: 600; padding: 7px 9px; border-bottom: 1px solid var(--line); }
+  table.cands th.num, table.cands td.num { text-align: right; }
+  table.cands td { padding: 8px 9px; border-bottom: 1px solid var(--line-soft); vertical-align: middle; }
+  table.cands tr.chosen td { background: rgba(31,111,235,.10); }
+  table.cands tr.chosen td:first-child { box-shadow: inset 3px 0 0 var(--chosen); }
+  table.cands tr.rejected td { opacity: .55; }
+  table.cands td .id { font-family: var(--mono); font-size: 12px; }
+  table.cands td .tags { margin-top: 3px; display: flex; gap: 4px; flex-wrap: wrap; }
+
+  .bar { position: relative; height: 16px; background: var(--bg); border-radius: 3px; border: 1px solid var(--line-soft); width: 92px; }
+  .bar > i { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 2px; background: var(--accent); }
+  .bar.b-bench > i { background: #7c5cde; }
+  .bar.b-trust > i { background: var(--good); }
+  .bar.b-price > i { background: var(--warn); }
+  .bar > .val { position: absolute; right: 4px; top: 0; bottom: 0; display: flex; align-items: center; font-family: var(--mono); font-size: 10px; color: var(--fg); }
+
+  .mono-num { font-family: var(--mono); }
+  .rtt-meas { color: var(--good); } .rtt-pred { color: var(--fg-dim); }
+
+  .rejected-list { margin-top: 12px; }
+  .rejected-list .r { font-size: 12px; color: var(--fg-dim); padding: 4px 0; border-bottom: 1px solid var(--line-soft); display: flex; gap: 10px; align-items: baseline; }
+  .rejected-list .r .id { font-family: var(--mono); font-size: 11px; color: var(--fg-faint); flex: 1; word-break: break-all; }
+  .rejected-list .r .why { font-family: var(--mono); font-size: 11px; }
+  .why.r-low_score { color: var(--fg-dim); }
+  .why.r-benchmark_suspect { color: var(--bad); }
+  .why.r-group_cap, .why.r-distinct_operator { color: var(--warn); }
+
+  .banner { border-radius: 8px; padding: 11px 14px; font-size: 13px; margin-bottom: 18px; border: 1px solid var(--line); }
+  .banner.warn { border-color: #3a3220; background: rgba(210,153,34,.08); color: #e0b85a; }
+  .banner.err { border-color: #5a2a30; background: rgba(240,85,106,.08); color: #f08a98; }
+  .banner code { color: inherit; }
+
+  .empty { color: var(--fg-faint); font-size: 13px; padding: 40px 0; text-align: center; }
+  .footnote { color: var(--fg-faint); font-size: 11px; margin-top: 30px; line-height: 1.6; border-top: 1px solid var(--line-soft); padding-top: 14px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>ce-sched</h1>
+  <span class="sub">placement visualizer &mdash; latency &middot; benchmark fit &middot; trust &middot; vendor diversity</span>
+  <span class="spacer"></span>
+  <span class="mode-badge" id="modeBadge">&mdash;</span>
+</header>
+
+<main>
+  <section class="controls">
+    <div class="group">
+      <div class="label">Source</div>
+      <div class="field">
+        <label>CE node base URL</label>
+        <input type="text" id="baseUrl" value="http://localhost:8844" spellcheck="false" />
+        <div class="hint">Leave default and click <b>Use demo fabric</b> if no node is running.</div>
+      </div>
+      <div class="btnrow">
+        <button class="ghost" id="btnDemo" style="flex:1">Use demo fabric</button>
+        <button class="ghost" id="btnLive" style="flex:1">Use live node</button>
+      </div>
+    </div>
+
+    <div class="group">
+      <div class="label">Job spec</div>
+      <div class="field">
+        <label>Payer node id (latency origin)</label>
+        <input type="text" id="payer" spellcheck="false" />
+        <div class="hint">Anchors &ldquo;near me&rdquo;. Auto-filled from the demo / node status.</div>
+      </div>
+      <div class="row2">
+        <div class="field"><label>CPU cores / host</label><input type="number" id="cpuCores" value="4" min="1" /></div>
+        <div class="field"><label>Memory (MB) / host</label><input type="number" id="memMb" value="2048" min="64" step="256" /></div>
+      </div>
+      <div class="row2">
+        <div class="field"><label>Redundancy K</label><input type="number" id="k" value="3" min="1" max="12" /></div>
+        <div class="field">
+          <label>Redundancy mode</label>
+          <select id="redundancy">
+            <option value="none">none (best K)</option>
+            <option value="verify" selected>verify (distinct operators)</option>
+            <option value="0.9">confidence 0.9</option>
+            <option value="0.99">confidence 0.99</option>
+          </select>
+        </div>
+      </div>
+      <div class="field">
+        <label>Required tags (comma-separated)</label>
+        <input type="text" id="requireTags" value="docker" spellcheck="false" />
+      </div>
+    </div>
+
+    <div class="group">
+      <div class="label">GPU / capability floor</div>
+      <div class="row2">
+        <div class="field"><label>min VRAM (MB)</label><input type="number" id="minVramMb" value="" placeholder="any" min="0" /></div>
+        <div class="field"><label>min GFLOPS</label><input type="number" id="minGflops" value="" placeholder="any" min="0" /></div>
+      </div>
+      <div class="field"><label>min tokens/sec (LLM)</label><input type="number" id="minTokensPerSec" value="" placeholder="any" min="0" /></div>
+      <label class="checkrow"><input type="checkbox" id="requireProfile" /> require a measured benchmark profile</label>
+    </div>
+
+    <div class="group">
+      <div class="label">Objective &amp; vendor spread</div>
+      <div class="field">
+        <label>Objective</label>
+        <select id="objective">
+          <option value="balanced" selected>balanced</option>
+          <option value="latency">latency</option>
+          <option value="throughput">throughput</option>
+          <option value="cheap">cheap</option>
+        </select>
+      </div>
+      <div class="row2">
+        <div class="field"><label>Max share / vendor</label><input type="number" id="maxShare" value="0.34" min="0.1" max="1" step="0.01" /></div>
+        <div class="field"><label>RTT soft cap (ms)</label><input type="number" id="rttSoftCapMs" value="250" min="10" /></div>
+      </div>
+      <div class="field">
+        <label>Selection</label>
+        <select id="selection">
+          <option value="best" selected>best (beacon tie-break)</option>
+          <option value="weighted">weighted (stochastic)</option>
+        </select>
+      </div>
+    </div>
+
+    <button class="primary" id="btnPlan">Compute placement</button>
+    <div class="hint" style="margin-top:8px">Runs the real <code>buildGraph &rarr; feasible &rarr; tagCandidates &rarr; select</code> pipeline from <code>../src</code>.</div>
+  </section>
+
+  <section class="results" id="results">
+    <div class="empty">Configure a job and click <b>Compute placement</b>.</div>
+  </section>
+</main>
+
+<script type="module">
+import { buildGraph } from "../src/graph.js";
+import { feasible, redundancyFor, select, beaconSeed } from "../src/placer.js";
+import { tagCandidates } from "../src/vendor.js";
+import { resolveWeights } from "../src/scorer.js";
+import { withDefaults } from "../src/types.js";
+import { CeClient } from "../src/ce.js";
+import { demoClient, DEMO_PAYER } from "./fixtures.js";
+
+const $ = (id) => document.getElementById(id);
+const results = $("results");
+let mode = "demo"; // "demo" | "live"
+
+// ----- formatting helpers --------------------------------------------------
+const pct = (x) => `${Math.round((x ?? 0) * 100)}`;
+const f2 = (x) => (Number.isFinite(x) ? x.toFixed(2) : "—");
+const shortId = (id) => (id && id.length > 18 ? `${id.slice(0, 10)}…${id.slice(-4)}` : id || "—");
+const CREDIT = 10n ** 18n;
+function fmtCredits(baseUnitsStr) {
+  if (typeof baseUnitsStr !== "string" || !/^\d+$/.test(baseUnitsStr)) return "—";
+  // integer base units -> human credits with up to 3 decimals, no float on the base unit.
+  const v = BigInt(baseUnitsStr);
+  const whole = v / CREDIT;
+  const milli = (v % CREDIT) * 1000n / CREDIT;
+  return `${whole.toString()}.${milli.toString().padStart(3, "0")}`;
+}
+
+// vendor color palette (deterministic by key)
+const PALETTE = ["#4da3ff", "#3fb950", "#d29922", "#a371f7", "#ff7b72", "#56d4dd", "#e3b341", "#79c0ff"];
+function colorFor(key, map) {
+  if (!map.has(key)) map.set(key, PALETTE[map.size % PALETTE.length]);
+  return map.get(key);
+}
+
+// ----- mode toggling -------------------------------------------------------
+function setMode(m) {
+  mode = m;
+  const badge = $("modeBadge");
+  badge.textContent = m === "live" ? "LIVE NODE" : "DEMO FABRIC";
+  badge.className = `mode-badge ${m}`;
+  if (m === "demo") $("payer").value = DEMO_PAYER;
+}
+$("btnDemo").onclick = () => setMode("demo");
+$("btnLive").onclick = async () => {
+  setMode("live");
+  // best-effort: pull this node's own id for the payer field
+  try {
+    const base = $("baseUrl").value.replace(/\/+$/, "");
+    const res = await fetch(`${base}/status`, { headers: { accept: "application/json" } });
+    if (res.ok) {
+      const s = await res.json();
+      const id = s.node_id || s.nodeId || s.id;
+      if (id) $("payer").value = id;
+    }
+  } catch { /* leave payer as-is */ }
+};
+
+// ----- build a PlacementRequest from the form ------------------------------
+function readRequest() {
+  const numOrUndef = (id) => {
+    const v = $(id).value.trim();
+    if (v === "") return undefined;
+    const n = Number(v);
+    return Number.isFinite(n) ? n : undefined;
+  };
+  const redRaw = $("redundancy").value;
+  const redundancy = redRaw === "none" || redRaw === "verify" ? redRaw : Number(redRaw);
+  const tags = $("requireTags").value.split(",").map((t) => t.trim()).filter(Boolean);
+
+  // Derive a benchFit demand vector from the capability floors so the bench axis discriminates.
+  // A floor of "at least X" reads naturally as demand on that axis with target X (saturating).
+  const minVram = numOrUndef("minVramMb");
+  const minGf = numOrUndef("minGflops");
+  const minTok = numOrUndef("minTokensPerSec");
+  const demand = {};
+  if (minVram) demand.vramMb = { weight: 1, target: minVram };
+  if (minGf) demand.gflops = { weight: 1, target: minGf };
+  if (minTok) demand.tokensPerSec = { weight: 1, target: minTok };
+
+  return {
+    payer: $("payer").value.trim(),
+    k: Math.max(1, Math.floor(numOrUndef("k") ?? 1)),
+    cpuCores: Math.max(1, Math.floor(numOrUndef("cpuCores") ?? 1)),
+    memMb: Math.max(64, Math.floor(numOrUndef("memMb") ?? 256)),
+    requireTags: tags,
+    redundancy,
+    maxShare: numOrUndef("maxShare") ?? 0.34,
+    rttSoftCapMs: numOrUndef("rttSoftCapMs") ?? 250,
+    objective: $("objective").value,
+    selection: $("selection").value,
+    minVramMb: numOrUndef("minVramMb"),
+    minGflops: numOrUndef("minGflops"),
+    minTokensPerSec: numOrUndef("minTokensPerSec"),
+    demand: Object.keys(demand).length ? demand : undefined,
+    requireProfile: $("requireProfile").checked,
+  };
+}
+
+// ----- the pipeline (mirrors plan(), but keeps the full scored candidate list) -----
+async function runPipeline(req) {
+  let ce;
+  if (mode === "live") {
+    ce = new CeClient($("baseUrl").value);
+  } else {
+    ce = demoClient();
+  }
+  const r = withDefaults(req);
+  const now = Math.floor(Date.now() / 1000);
+
+  const [ng, atlas, beacon] = await Promise.all([ce.netgraph(), ce.atlas(), ce.beacon()]);
+  const graph = buildGraph(new Map([[r.payer, ng]]), atlas, {});
+  const cand0 = feasible(atlas, r, graph, now);
+
+  if (typeof ce.histories === "function" && cand0.length) {
+    const hist = await ce.histories(cand0.map((c) => c.nodeId));
+    for (const c of cand0) c.history = hist.get(c.nodeId) ?? null;
+  }
+  const cands = tagCandidates(cand0, graph);
+  const seed = beaconSeed(beacon, r);
+  const sel = select(cands, r, graph, seed); // mutates each c.score
+  const effectiveK = redundancyFor(cands, r);
+  let weights;
+  try { weights = resolveWeights(r); } catch { weights = { wL: .25, wB: .25, wT: .25, wP: .1, wD: .15 }; }
+
+  return { atlas, graph, cands, sel, beacon, effectiveK, weights, req: r,
+           feasibleCount: cand0.length, totalAdvertised: atlas.length };
+}
+
+// ----- rendering -----------------------------------------------------------
+function partsOf(c) {
+  const p = (c.score && c.score.parts) || {};
+  return {
+    latency: p.latency ?? 0, benchFit: p.benchFit ?? 0, trust: p.trust ?? 0, price: p.price ?? 0,
+    total: (c.score && c.score.total) ?? 0,
+    suspect: !!(c.score && c.score.benchmarkSuspect),
+    benchSource: c.score && c.score.benchFit ? c.score.benchFit.source : null,
+    benchConf: c.score && c.score.benchFit ? c.score.benchFit.confidence : null,
+  };
+}
+
+function bar(cls, v) {
+  const w = Math.round(Math.max(0, Math.min(1, v)) * 100);
+  return `<div class="bar ${cls}"><i style="width:${w}%"></i><span class="val">${pct(v)}</span></div>`;
+}
+
+function vendorPills(g, suspect, fallback, measured) {
+  if (!g) return "";
+  let out = "";
+  out += `<span class="pill op">op:${g.operator ? shortId(g.operator) : "?"}</span>`;
+  if (g.region) out += `<span class="pill region">r:${g.region}</span>`;
+  if (g.asn && g.asn !== "unknown") out += `<span class="pill asn">asn:${g.asn}</span>`;
+  out += measured ? `<span class="pill measured">measured RTT</span>` : `<span class="pill predicted">predicted RTT</span>`;
+  if (fallback) out += `<span class="pill fallback">atlas fallback</span>`;
+  if (suspect) out += `<span class="pill suspect">benchmark suspect</span>`;
+  return out;
+}
+
+function render(out) {
+  const { sel, cands, beacon, effectiveK, weights, req, feasibleCount, totalAdvertised } = out;
+  const chosenIds = new Set(sel.targets.map((t) => t.nodeId));
+  const candById = new Map(cands.map((c) => [c.nodeId, c]));
+
+  // diversity over chosen operators
+  const opCount = new Map();
+  for (const t of sel.targets) {
+    const op = t.groups ? t.groups.operator : t.nodeId;
+    opCount.set(op, (opCount.get(op) || 0) + 1);
+  }
+  const distinctOps = opCount.size;
+  const colorMap = new Map();
+
+  let html = "";
+
+  // banners
+  if (sel.shortfall > 0) {
+    html += `<div class="banner warn">Short plan: requested <b>${effectiveK}</b> hosts but only placed <b>${sel.targets.length}</b> &mdash; shortfall <b>${sel.shortfall}</b>.${sel.relaxed && sel.relaxed.length ? ` Relaxed: <code>${sel.relaxed.join(", ")}</code>.` : ""}</div>`;
+  } else if (sel.relaxed && sel.relaxed.length) {
+    html += `<div class="banner warn">Diversity relaxed to fill the plan: <code>${sel.relaxed.join(", ")}</code>.</div>`;
+  }
+  if (!sel.targets.length) {
+    html += `<div class="banner err">No hosts placed. ${feasibleCount === 0 ? "Nothing passed the hard feasibility filter (liveness / headroom / tags / floor)." : "All feasible hosts were rejected by scoring or diversity caps."}</div>`;
+  }
+
+  // summary cards
+  const okClass = sel.shortfall > 0 ? "warn" : "ok";
+  html += `<div class="summary">
+    <div class="card"><div class="k">Placed / target</div><div class="v ${okClass}">${sel.targets.length}<span style="color:var(--fg-faint);font-size:14px"> / ${effectiveK}</span></div><div class="note">requested K = ${req.k}${effectiveK > req.k ? ` &rarr; ${effectiveK} for redundancy` : ""}</div></div>
+    <div class="card"><div class="k">Distinct vendors</div><div class="v ${distinctOps >= sel.targets.length && sel.targets.length ? "ok" : "warn"}">${distinctOps}</div><div class="note">max share ${Math.round(req.maxShare * 100)}% / vendor</div></div>
+    <div class="card"><div class="k">Feasible pool</div><div class="v small">${feasibleCount}<span style="color:var(--fg-faint)"> of ${totalAdvertised}</span></div><div class="note">passed hard filter</div></div>
+    <div class="card"><div class="k">Objective</div><div class="v small">${req.objective}</div><div class="note">L${f2(weights.wL)} B${f2(weights.wB)} T${f2(weights.wT)} P${f2(weights.wP)}</div></div>
+    <div class="card"><div class="k">Beacon</div><div class="v small mono">#${beacon.height}</div><div class="note mono">${beacon.hash ? beacon.hash.slice(0, 12) : "—"}</div></div>
+  </div>`;
+
+  // chosen spread
+  html += `<h2 class="section">Chosen spread &mdash; redundancy &amp; vendor diversity</h2>`;
+  if (sel.targets.length) {
+    // diversity bar
+    let segs = "";
+    let legend = "";
+    for (const [op, n] of opCount) {
+      const col = colorFor(op, colorMap);
+      const w = (n / sel.targets.length) * 100;
+      segs += `<div class="divseg" style="flex:${n};background:${col}" title="${op}: ${n}">${n}</div>`;
+      legend += `<span><b style="color:${col}">&#9632;</b> ${shortId(op)} &times;${n}</span>`;
+    }
+    html += `<div class="diversity"><div class="divbar">${segs}</div><div class="divlegend">${legend}</div></div>`;
+
+    html += `<div class="spread" style="margin-top:12px">`;
+    sel.targets.forEach((t, i) => {
+      const c = candById.get(t.nodeId);
+      const p = c ? partsOf(c) : { latency: 0, benchFit: 0, trust: 0, price: 0, suspect: false };
+      const meas = c ? c.rttMeasured : false;
+      const fb = p.benchSource === "atlas";
+      const col = colorFor(t.groups ? t.groups.operator : t.nodeId, colorMap);
+      const ask = c && c.askBaseUnits ? `${fmtCredits(c.askBaseUnits)} cr/hr` : "no ask";
+      html += `<div class="replica" style="border-left-color:${col}">
+        <div class="rank">${i + 1}</div>
+        <div>
+          <div class="id">${t.nodeId}</div>
+          <div class="meta">
+            <span>RTT <b class="${meas ? "rtt-meas" : "rtt-pred"}">${Math.round(t.rttMs)}ms</b> ${meas ? "(measured)" : "(predicted)"}</span>
+            <span>bench&nbsp;fit <b>${pct(t.benchFit)}%</b></span>
+            <span>trust <b>${pct(t.trust)}%</b></span>
+            <span>price <b>${ask}</b></span>
+          </div>
+          <div class="meta" style="margin-top:5px">${vendorPills(t.groups, p.suspect, fb, meas)}</div>
+        </div>
+        <div class="score" style="color:${col}">${f2(t.score)}<span class="lbl">SCORE</span></div>
+      </div>`;
+    });
+    html += `</div>`;
+  } else {
+    html += `<div class="empty">No targets chosen.</div>`;
+  }
+
+  // full ranked candidate table
+  html += `<h2 class="section">All feasible candidates (ranked)</h2>`;
+  if (cands.length) {
+    const ranked = cands.slice().sort((a, b) => partsOf(b).total - partsOf(a).total);
+    html += `<table class="cands"><thead><tr>
+      <th>Host</th>
+      <th class="num">RTT</th>
+      <th>Latency</th><th>Bench fit</th><th>Trust</th><th>Price</th>
+      <th class="num">Score</th>
+      <th>Vendor</th>
+    </tr></thead><tbody>`;
+    for (const c of ranked) {
+      const p = partsOf(c);
+      const chosen = chosenIds.has(c.nodeId);
+      const meas = c.rttMeasured;
+      const fb = p.benchSource === "atlas";
+      const ask = c.askBaseUnits ? `${fmtCredits(c.askBaseUnits)} cr/hr` : "<span style='color:var(--fg-faint)'>no ask</span>";
+      html += `<tr class="${chosen ? "chosen" : ""}">
+        <td><div class="id">${shortId(c.nodeId)}</div>
+            <div class="tags">${(c.capacity.tags || []).map((t) => `<span class="pill">${t}</span>`).join("")}</div></td>
+        <td class="num mono-num ${meas ? "rtt-meas" : "rtt-pred"}">${Math.round(c.rttMs)}ms<br><span style="font-size:10px;color:var(--fg-faint)">${meas ? "meas" : "pred"}</span></td>
+        <td>${bar("", p.latency)}</td>
+        <td>${bar("b-bench", p.benchFit)}${fb ? `<div style="font-size:10px;color:var(--warn);margin-top:2px">fallback ${p.benchConf != null ? "c" + f2(p.benchConf) : ""}</div>` : ""}${p.suspect ? `<div style="font-size:10px;color:var(--bad);margin-top:2px">suspect</div>` : ""}</td>
+        <td>${bar("b-trust", p.trust)}</td>
+        <td>${bar("b-price", p.price)}<div style="font-size:10px;color:var(--fg-dim);margin-top:2px">${ask}</div></td>
+        <td class="num mono-num" style="font-weight:700;color:${chosen ? "var(--accent)" : "var(--fg)"}">${f2(p.total)}</td>
+        <td>${vendorPills(c.groups, false, false, meas)}</td>
+      </tr>`;
+    }
+    html += `</tbody></table>`;
+  } else {
+    html += `<div class="empty">No feasible candidates. ${feasibleCount === 0 ? "All advertised hosts failed the hard filter." : ""}</div>`;
+  }
+
+  // rejected
+  if (sel.rejected && sel.rejected.length) {
+    html += `<h2 class="section">Rejected during selection</h2><div class="rejected-list">`;
+    for (const rej of sel.rejected) {
+      html += `<div class="r"><span class="id">${rej.nodeId}</span><span class="why r-${rej.reason}">${rej.reason}</span></div>`;
+    }
+    html += `</div>`;
+  }
+
+  html += `<div class="footnote">
+    Scoring blend (objective <b>${req.objective}</b>): score = wL&middot;latency + wB&middot;benchFit + wT&middot;trust + wP&middot;price &minus; wD&middot;diversityPenalty,
+    with wL=${f2(weights.wL)}, wB=${f2(weights.wB)}, wT=${f2(weights.wT)}, wP=${f2(weights.wP)}, wD=${f2(weights.wD)}.<br>
+    Selection is beacon-seeded for an auditable, BFT-safe tie-break (beacon #${beacon.height}). Money is integer base units; asks shown as credits/hr.
+    benchFit reads the signed NodeProfile when present, else degrades to atlas tags/cores at reduced confidence.
+  </div>`;
+
+  results.innerHTML = html;
+}
+
+// ----- run -----------------------------------------------------------------
+async function compute() {
+  const btn = $("btnPlan");
+  btn.disabled = true; btn.textContent = "Computing…";
+  results.innerHTML = `<div class="empty">Running placement pipeline…</div>`;
+  try {
+    const req = readRequest();
+    if (!req.payer) throw new Error("payer node id is required (use the demo or live button to fill it)");
+    const out = await runPipeline(req);
+    render(out);
+  } catch (err) {
+    results.innerHTML = `<div class="banner err"><b>Pipeline error:</b> ${String(err && err.message || err)}<br>
+      ${mode === "live" ? `Could not reach <code>${$("baseUrl").value}</code>. Try <b>Use demo fabric</b> to explore offline.` : ""}</div>`;
+  } finally {
+    btn.disabled = false; btn.textContent = "Compute placement";
+  }
+}
+$("btnPlan").onclick = compute;
+
+// boot: demo mode, auto-run so the page is never blank.
+setMode("demo");
+compute();
+</script>
+</body>
+</html>

@@ -1,0 +1,22 @@
+{
+  "name": "@ce-net/sched",
+  "version": "0.0.1",
+  "description": "Smart, latency- and benchmark-aware, BFT-safe job placement for the CE compute fabric (P2/P3 at the app layer).",
+  "type": "module",
+  "license": "MIT",
+  "author": "Leif Rydenfalk <ledamecrydenfalk@gmail.com>",
+  "main": "src/index.js",
+  "exports": {
+    ".": "./src/index.js",
+    "./ce": "./src/ce.js",
+    "./graph": "./src/graph.js",
+    "./scorer": "./src/scorer.js",
+    "./vendor": "./src/vendor.js",
+    "./placer": "./src/placer.js",
+    "./types": "./src/types.js"
+  },
+  "scripts": {
+    "check": "node --check src/*.js"
+  },
+  "dependencies": {}
+}
