@@ -393,9 +393,16 @@ export function staticScore(candidate, req, graph) {
     price,
   };
 
-  const score = clamp01(
+  const blended = clamp01(
     w.wL * latency + w.wB * bench.score + w.wT * trust.score + w.wP * price,
   );
+  // Runtime-kind adjustment: browser-WASM nodes execute jobs ~5-10x slower than native, so downrank
+  // them (harder when the job is throughput-bound); and prefer the payer's own node when it is itself
+  // a candidate, since running locally avoids the WAN hop entirely. Applied AFTER the convex blend so
+  // the axis parts stay interpretable; surfaced in `parts.runtimeFactor` for auditability.
+  const runtimeFactor = runtimeKindFactor(candidate, req, w);
+  const score = clamp01(blended * runtimeFactor);
+  parts.runtimeFactor = runtimeFactor;
 
   return {
     score,
@@ -403,6 +410,36 @@ export function staticScore(candidate, req, graph) {
     benchFit: { source: bench.source, confidence: bench.confidence },
     benchmarkSuspect: trust.benchmarkSuspect,
   };
+}
+
+/** Browser-WASM throughput is ~5-10x native; base multiplier applied to a browser candidate's score. */
+export const BROWSER_RUNTIME_PENALTY = 0.6;
+/** Extra throughput discount: a browser is penalized more as the benchFit weight (wB) rises. */
+export const BROWSER_THROUGHPUT_DISCOUNT = 0.3;
+/** Boost for the payer's own node (zero network hop), when `req.localNodeId` is set and matches. */
+export const PREFER_LOCAL_BOOST = 1.15;
+
+/**
+ * Multiplicative score adjustment for a candidate's runtime kind + locality. Returns 1 for a native
+ * remote node with no locality signal (i.e. no change). Pure.
+ *
+ * @param {Candidate} candidate @param {any} req @param {{wB:number}} w resolved weights
+ * @returns {number} a finite factor in (0, ~1.15]
+ */
+export function runtimeKindFactor(candidate, req, w) {
+  let f = 1;
+  const kind =
+    candidate && candidate.profile && candidate.profile.runtime && candidate.profile.runtime.kind;
+  if (kind === "Browser") {
+    const wB = w && Number.isFinite(w.wB) ? w.wB : 0;
+    f *= BROWSER_RUNTIME_PENALTY * (1 - BROWSER_THROUGHPUT_DISCOUNT * clamp01(wB));
+  }
+  // Prefer-local is opt-in: the caller sets req.localNodeId to its own node id. No assumption about
+  // any other request field, so this never fires unless explicitly requested.
+  if (req && req.localNodeId && candidate && candidate.node_id === req.localNodeId) {
+    f *= PREFER_LOCAL_BOOST;
+  }
+  return f;
 }
 
 // ----------------------------------------------------------------------------
@@ -501,6 +538,42 @@ export function __selftest() {
     // Degenerate all-zero override falls back to an equal split.
     const deg = resolveWeights({ weights: { wL: 0, wB: 0, wT: 0, wP: 0 } });
     assert(deg.wL === 0.25 && deg.wP === 0.25, "all-zero blend falls back to equal split");
+  }
+
+  // --- runtimeKindFactor (browser penalty + prefer-local) ------------------
+  {
+    const w = resolveWeights({ objective: "throughput" });
+    const native = runtimeKindFactor({ node_id: "n", profile: { runtime: { kind: "Native" } } }, {}, w);
+    assert(native === 1, "native node gets no runtime adjustment");
+
+    const browser = runtimeKindFactor({ node_id: "b", profile: { runtime: { kind: "Browser" } } }, {}, w);
+    assert(browser < 1, "browser node is penalized");
+    assert(browser <= BROWSER_RUNTIME_PENALTY, "browser penalized at least the base on throughput");
+
+    // The browser penalty is harsher on throughput than on latency objectives.
+    const wL = resolveWeights({ objective: "latency" });
+    const browserLat = runtimeKindFactor({ node_id: "b", profile: { runtime: { kind: "Browser" } } }, {}, wL);
+    assert(browserLat > browser, "browser penalized harder when throughput-bound (high wB)");
+
+    // No profile -> unknown kind -> no penalty (treated as native/unknown, not punished).
+    assert(runtimeKindFactor({ node_id: "x" }, {}, w) === 1, "missing profile -> no runtime penalty");
+
+    // Prefer-local: opt-in via req.localNodeId; only the matching node is boosted.
+    const local = runtimeKindFactor({ node_id: "me", profile: { runtime: { kind: "Native" } } }, { localNodeId: "me" }, w);
+    assert(Math.abs(local - PREFER_LOCAL_BOOST) < 1e-9, "payer's own node gets the prefer-local boost");
+    const remote = runtimeKindFactor({ node_id: "other", profile: { runtime: { kind: "Native" } } }, { localNodeId: "me" }, w);
+    assert(remote === 1, "a different node is not boosted by prefer-local");
+
+    // staticScore surfaces the factor and a browser candidate ranks below an identical native one.
+    const prof = (kind) => ({ cpu: { gflops_fp32: 100 }, runtime: { kind } });
+    const cNative = { node_id: "nn", profile: prof("Native") };
+    const cBrowser = { node_id: "bb", profile: prof("Browser") };
+    const req = { objective: "throughput" };
+    const sN = staticScore(cNative, req, undefined);
+    const sB = staticScore(cBrowser, req, undefined);
+    assert(typeof sN.parts.runtimeFactor === "number", "staticScore exposes runtimeFactor part");
+    assert(sN.parts.runtimeFactor === 1 && sB.parts.runtimeFactor < 1, "browser candidate carries the penalty");
+    assert(sB.score < sN.score, "identical browser node ranks below the native one (slower wasm)");
   }
 
   // Fixture topology: payer "me" is near us-near (10 ms) and far from us-far (300 ms, past the soft
