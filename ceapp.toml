@@ -1,0 +1,45 @@
+# ce-sched — smart, latency/benchmark-aware, BFT-safe job placement on the CE fabric.
+#
+# Per-machine agent (a singleton, like the CE node and ce-bench): exactly one daemon per node,
+# supervised by ce-appmgr. It is NOT capability-placed — it installs on every participating node and
+# serves that machine's local placement API. It consumes the Fabric Map that the local ce-bench
+# daemon assembles, then plans + dispatches jobs against it.
+[app]
+name = "ce-sched"
+version = "0.0.1"
+summary = "Per-machine placement agent: serves /plan, /place, /map; plans against the local ce-bench Fabric Map and dispatches via the node's /mesh-deploy."
+runtime = "native"
+publisher = "c0be11e0ce0aaa769da6f9970244947d3d32a0c0d8302fb5f41f73d7950be456"
+
+[native]
+# The supervised binary (cargo bin `ce-sched-daemon`). Per-(os,arch) release artifacts are attached
+# at release time; this is a placeholder until the CI cross-build + ce-appmgr packaging lands.
+bin = "ce-sched-daemon"
+# Content-addressed launch binaries keyed by host (os, arch) for a REGISTRY install (sha256 of the
+# release binary uploaded to ce-hub /blobs). A local-source `ce app install ./ce-sched` ignores this
+# and uses the freshly-built `target/release/ce-sched-daemon` directly, so it is intentionally left
+# as a placeholder until the binaries are published to the hub.
+[native.artifacts]
+# "darwin-arm64"  = "PLACEHOLDER_darwin_arm64"
+# "darwin-amd64"  = "PLACEHOLDER_darwin_amd64"
+# "linux-amd64"   = "PLACEHOLDER_linux_amd64"
+# "linux-arm64"   = "PLACEHOLDER_linux_arm64"
+# "windows-amd64" = "PLACEHOLDER_windows_amd64"
+
+[sandbox]
+# Native daemon, no container/gVisor tier. It only binds loopback (127.0.0.1:8856) and talks to the
+# local node API + the local ce-bench daemon — never a public listener.
+tier = "none"
+net  = "loopback"
+
+[daemon]
+# Long-running singleton; ce-appmgr keeps the one instance alive. A second install is a no-op/refresh,
+# never a second process.
+enabled = true
+restart = "on-failure"
+
+[deps]
+# ce-sched consumes ce-bench: it reads the assembled Fabric Map from the local ce-bench daemon
+# (default http://127.0.0.1:8855, override with $CE_BENCH_ADDR). ce-bench must be installed + running
+# on the same machine for the richest map; without it ce-sched degrades to a node-substrate-only map.
+ce-bench = "^0.0.1"

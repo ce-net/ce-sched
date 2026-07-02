@@ -1,0 +1,33 @@
+{
+  "name": "@ce-net/sched-sdk",
+  "version": "0.0.1",
+  "description": "Typed TypeScript/JavaScript client for the ce-sched per-machine daemon API (plan/place/map). Talks to the local daemon at http://127.0.0.1:8856.",
+  "type": "module",
+  "license": "MIT",
+  "author": "Leif Rydenfalk <ledamecrydenfalk@gmail.com>",
+  "main": "dist/index.js",
+  "module": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "src",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "check": "tsc -p tsconfig.json --noEmit"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "sideEffects": false,
+  "devDependencies": {
+    "typescript": "^5.9.3"
+  }
+}

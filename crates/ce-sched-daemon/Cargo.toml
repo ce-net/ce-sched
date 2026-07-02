@@ -1,0 +1,24 @@
+[package]
+name = "ce-sched-daemon"
+version = "0.0.1"
+description = "Per-machine ce-sched agent: serves /plan, /place, /map over HTTP; dispatches via the node's /mesh-deploy."
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+
+[[bin]]
+name = "ce-sched-daemon"
+path = "src/main.rs"
+
+[dependencies]
+ce-sched-core = { path = "../ce-sched-core" }
+ce-rs = { workspace = true }
+tokio = { workspace = true }
+axum = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+anyhow = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+reqwest = { workspace = true }

@@ -1,0 +1,18 @@
+[package]
+name = "ce-sched-sdk"
+version = "0.0.1"
+description = "Typed Rust client for the ce-sched daemon API (plan/place/map), plus the pure planner re-exported from ce-sched-core."
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+
+[dependencies]
+ce-sched-core = { path = "../ce-sched-core" }
+reqwest = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+anyhow = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true }

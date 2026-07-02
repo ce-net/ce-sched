@@ -4,3 +4,6 @@ dist/
 *.log
 worker-id
 .DS_Store
+
+# rust build artifacts
+target/

@@ -1,0 +1,17 @@
+[package]
+name = "ce-sched-core"
+version = "0.0.1"
+description = "Pure placement brain + shared daemon-API wire types for ce-sched. No I/O, no node, fully unit-tested."
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+
+# PURE crate: serde only. The graph/scorer/placer/vendor modules are deterministic functions of their
+# arguments — `(JobSpec, FabricMap) -> PlacementPlan` — so the entire policy is unit-testable here with
+# fixtures and no live node. Keep it dependency-light.
+[dependencies]
+serde = { workspace = true }
+
+[dev-dependencies]
+serde_json = { workspace = true }
